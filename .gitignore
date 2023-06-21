@@ -24,3 +24,6 @@ dask-*.tar
 
 # Temporary files, for example, from tests.
 /tmp/
+
+# mnesia data
+.mnesia
