@@ -8,8 +8,10 @@ defmodule Dask.Application do
   @impl true
   def start(_type, _args) do
     children = [
+      Dask.Clock,
+      Dask.Repo,
       Dask.Executor,
-      Dask.Repo
+      Dask.Scheduler
       # Starts a worker by calling: Dask.Worker.start_link(arg)
       # {Dask.Worker, arg}
     ]
