@@ -26,10 +26,8 @@ defmodule Dask.Executor do
 
   @impl GenServer
   def handle_cast({:exec, command}, state) do
-    %{id: job_id} =
-      Memento.transaction!(fn ->
-        Memento.Query.write(%Dask.DB.Job{time_of_start: DateTime.utc_now(), command: command})
-      end)
+    {:ok, %{id: job_id}} =
+      Dask.Repo.insert(%Dask.Job{time_of_start: DateTime.utc_now(), command: command})
 
     port = Port.open({:spawn, command}, [:exit_status])
 
@@ -38,13 +36,8 @@ defmodule Dask.Executor do
 
   @impl GenServer
   def handle_cast({:exec_func, function}, state) do
-    %{id: job_id} =
-      Memento.transaction!(fn ->
-        Memento.Query.write(%Dask.DB.Job{
-          time_of_start: DateTime.utc_now(),
-          command: "Anonymous function"
-        })
-      end)
+    {:ok, %{id: job_id}} =
+      Dask.Repo.insert(%Dask.Job{time_of_start: DateTime.utc_now(), command: "Anonymous function"})
 
     task = Task.Supervisor.async_nolink(Dask.Executor.Elixir, function)
 
@@ -53,13 +46,11 @@ defmodule Dask.Executor do
 
   @impl GenServer
   def handle_cast({:exec_mfa, module, function, arguments}, state) do
-    %{id: job_id} =
-      Memento.transaction!(fn ->
-        Memento.Query.write(%Dask.DB.Job{
-          time_of_start: DateTime.utc_now(),
-          command: inspect({module, function, arguments})
-        })
-      end)
+    {:ok, %{id: job_id}} =
+      Dask.Repo.insert(%Dask.Job{
+        time_of_start: DateTime.utc_now(),
+        command: inspect({module, function, arguments})
+      })
 
     task = Task.Supervisor.async_nolink(Dask.Executor.Elixir, module, function, arguments)
 
@@ -68,65 +59,61 @@ defmodule Dask.Executor do
 
   @impl GenServer
   def handle_info({port, {:exit_status, status}}, state) when is_port(port) do
-    Memento.transaction!(fn ->
-      job = Memento.Query.read(Dask.DB.Job, Map.get(state, port))
+    job = Dask.Repo.get(Dask.Job, Map.get(state, port))
 
-      Memento.Query.write(%Dask.DB.Job{
-        job
-        | exit_status: status,
-          time_of_finish: DateTime.utc_now()
-      })
-    end)
+    changeset =
+      Ecto.Changeset.cast(job, %{exit_status: "#{status}", time_of_finish: DateTime.utc_now()}, [
+        :exit_status,
+        :time_of_finish
+      ])
+
+    Dask.Repo.update(changeset)
 
     {:noreply, Map.drop(state, [port])}
   end
 
   @impl GenServer
   def handle_info({port, {:data, data}}, state) when is_port(port) do
-    Memento.transaction!(fn ->
-      job = Memento.Query.read(Dask.DB.Job, Map.get(state, port))
+    job = Dask.Repo.get(Dask.Job, Map.get(state, port))
 
-      job =
-        Map.update(job, :output, "", fn x ->
-          if not is_nil(x) do
-            x
-          else
-            ""
-          end <>
-            List.to_string(data)
-        end)
+    new_output =
+      if not is_nil(job.output) do
+        job.output
+      else
+        ""
+      end <>
+        List.to_string(data)
 
-      Memento.Query.write(job)
-    end)
+    changeset = Ecto.Changeset.cast(job, %{output: new_output}, [:output])
+
+    Dask.Repo.update(changeset)
 
     {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({ref, result}, state) when is_reference(ref) do
-    Memento.transaction!(fn ->
-      job = Memento.Query.read(Dask.DB.Job, Map.get(state, ref))
+    job = Dask.Repo.get(Dask.Job, Map.get(state, ref))
 
-      job = Map.put(job, :output, result)
+    changeset = Ecto.Changeset.cast(job, %{output: result}, [:output])
 
-      Memento.Query.write(%Dask.DB.Job{job | output: result})
-    end)
+    Dask.Repo.update(changeset)
 
     {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:DOWN, ref, _, _, status}, state) do
-    Memento.transaction!(fn ->
-      job = Memento.Query.read(Dask.DB.Job, Map.get(state, ref))
+    job = Dask.Repo.get(Dask.Job, Map.get(state, ref))
 
-      Memento.Query.write(%Dask.DB.Job{
-        job
-        | exit_status: status,
-          time_of_finish: DateTime.utc_now()
-      })
-    end)
+    changeset =
+      Ecto.Changeset.cast(job, %{exit_status: status, time_of_finish: DateTime.utc_now()}, [
+        :exit_status,
+        :time_of_finish
+      ])
 
-    {:noreply, state}
+    Dask.Repo.update(changeset)
+
+    {:noreply, Map.drop(state, [ref])}
   end
 end

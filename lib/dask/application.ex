@@ -7,10 +7,9 @@ defmodule Dask.Application do
 
   @impl true
   def start(_type, _args) do
-    Dask.DB.init()
-
     children = [
-      Dask.Executor
+      Dask.Executor,
+      Dask.Repo
       # Starts a worker by calling: Dask.Worker.start_link(arg)
       # {Dask.Worker, arg}
     ]
