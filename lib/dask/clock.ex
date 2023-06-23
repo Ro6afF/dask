@@ -17,7 +17,7 @@ defmodule Dask.Clock do
     # TODO: dispatch via registry
     Dask.Scheduler.refresh()
 
-    Process.send_after(self(), :heartbeat, 10000)
+    Process.send_after(self(), :heartbeat, 1000)
     {:noreply, state}
   end
 end

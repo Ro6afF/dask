@@ -1,8 +1,6 @@
 defmodule Dask.Executor do
   use GenServer
 
-  import Ecto.Query
-
   def start_link(_ \\ []) do
     GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
@@ -67,16 +65,7 @@ defmodule Dask.Executor do
 
     Dask.Repo.update(changeset)
 
-    Dask.Repo.transaction(fn ->
-      task =
-        Dask.Repo.one(from(t in Dask.DB.Task, where: t.id == ^result.task_id, lock: "FOR UPDATE"))
-
-      changeset = Ecto.Changeset.cast(task, %{executor: nil}, [:executor])
-
-      IO.inspect(changeset)
-
-      Dask.Repo.update(changeset)
-    end)
+    Dask.Scheduler.reschedule(result.task_id)
 
     {:noreply, state}
   end
@@ -103,6 +92,8 @@ defmodule Dask.Executor do
       ])
 
     Dask.Repo.update(changeset)
+
+    Dask.Scheduler.reschedule(result.task_id)
 
     {:noreply, Map.drop(state, [ref])}
   end

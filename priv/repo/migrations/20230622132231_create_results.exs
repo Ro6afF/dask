@@ -7,6 +7,7 @@ defmodule Dask.Repo.Migrations.CreateResults do
       add :command, :string
       add :possible_nodes, {:array, :string}
       add :scheduled_time, :utc_datetime_usec
+      add :cron_schedule, :string
       add :executor, :string
     end
 
